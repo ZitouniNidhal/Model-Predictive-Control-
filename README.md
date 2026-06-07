@@ -38,10 +38,16 @@ python mpc_python/mpc_demo_nosim.py
 python mpc_python/mpc_demo_nosim.py --obstacle-avoidance
 ```
 
-4. If MuJoCo is installed, run the MuJoCo demo:
+4. Run the MuJoCo demo if MuJoCo is installed:
 
 ```bash
 python mpc_python/mpc_demo_mujoco.py
+```
+
+5. Install locally for package-style imports:
+
+```bash
+python -m pip install -e .
 ```
 
 ## Features
@@ -49,15 +55,24 @@ python mpc_python/mpc_demo_mujoco.py
 - Iterative linearization around the bicycle model using CVXPY and OSQP
 - Support for quadratic state and input penalties
 - Steering rate constraints and obstacle avoidance through convexified halfspace constraints
-- A headless demo with trajectory plots, control input graphs, and tracking error visualization
+- Reference generation from circular or waypoint-based paths
+- A headless demo with trajectory plots, control inputs, and tracking error visualization
 
 ## Configuration
 
-- `config/mpc.yaml` contains MPC weighting and constraint parameters
-- `config/simulation.yaml` includes the reference path and obstacle definitions
+- `config/mpc.yaml` contains MPC weights, solver settings, and constraint limits
+- `config/simulation.yaml` defines the reference path, static/moving obstacles, and run settings
 
 ## Notes
 
-- `mpc_demo_nosim.py` is the easiest way to run the controller without MuJoCo.
+- `mpc_demo_nosim.py` is the easiest way to evaluate the controller without MuJoCo.
 - `mpc_demo_mujoco.py` is a demo wrapper for a placeholder MuJoCo vehicle.
-- The obstacle avoidance demo uses moving obstacle predictions and sequential convexification.
+- `config/simulation.yaml` now supports circle and waypoint reference paths.
+
+## Testing
+
+Run the basic code-level test with:
+
+```bash
+pytest tests/test_mpc_basic.py
+```

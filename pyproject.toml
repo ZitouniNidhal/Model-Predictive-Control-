@@ -1,0 +1,22 @@
+[project]
+name = "mpc_python"
+version = "0.1.0"
+description = "Iterative MPC tracking demo using CVXPY and optional MuJoCo visualization."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy",
+  "scipy",
+  "matplotlib",
+  "PyYAML",
+  "cvxpy",
+  "osqp",
+  "mujoco",
+]
+authors = [
+  { name = "ZitouniNidhal" },
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 import time
+import numpy as np
 
 try:
     import mujoco
@@ -8,13 +9,19 @@ try:
 except ImportError:  # pragma: no cover
     mujoco = None
 
-from mpc_python.cvxpy_mpc import IterativeMPC, load_yaml, build_circular_reference
+from mpc_python.cvxpy_mpc import (
+    IterativeMPC,
+    build_circular_reference,
+    build_waypoint_reference,
+    load_yaml,
+)
 
 
 def main():
     parser = argparse.ArgumentParser(description="MuJoCo MPC demo entry point.")
     parser.add_argument("--config", default="config/mpc.yaml", help="Path to MPC configuration")
     parser.add_argument("--simulation", default="config/simulation.yaml", help="Path to simulation configuration")
+    parser.add_argument("--reference-mode", choices=["circle", "waypoints"], default=None, help="Reference path type to use in MuJoCo demo.")
     args = parser.parse_args()
 
     if mujoco is None:
@@ -36,26 +43,18 @@ def main():
 
     horizon = int(mpc_config["horizon"])
     dt = float(mpc_config["dt"])
-    track = sim_config["track"]
-    reference = build_circular_reference(
-        n_points=1000,
-        radius=float(track["radius"]),
-        speed=float(track["speed"]),
-        dt=dt,
-        center=tuple(track["center"]),
-        start_angle=float(track["start_angle"]),
-    )
+    reference = generate_reference(sim_config, 1000, dt, args.reference_mode)
 
     mpc = IterativeMPC(mpc_config)
-    u_prev = [[0.0, 0.0]] * horizon
+    u_prev = np.zeros((horizon, 2), dtype=float)
     step = 0
 
     while viewer.is_running and step < int(sim_config["simulation"].get("max_steps", 200)):
         x_pos = data.qpos[0]
         y_pos = data.qpos[1]
         yaw = data.qpos[2]
-        speed = data.qvel[0]
-        x_state = [x_pos, y_pos, yaw, float(speed)]
+        speed = float(data.qvel[0])
+        x_state = [x_pos, y_pos, yaw, speed]
 
         ref_index = min(step, len(reference) - horizon - 1)
         ref_segment = reference[ref_index : ref_index + horizon + 1]
@@ -68,10 +67,37 @@ def main():
         mujoco.mj_step(model, data)
         viewer.render()
         time.sleep(dt)
-        u_prev = list(u_opt)
+        u_prev = np.array(u_opt, dtype=float)
         step += 1
 
     viewer.close()
+
+
+def generate_reference(sim_config, n_points, dt, override_mode=None):
+    reference_config = sim_config.get("reference", {})
+    reference_type = override_mode or reference_config.get("type", "circle")
+    speed = float(reference_config.get("speed", sim_config.get("track", {}).get("speed", 1.5)))
+
+    if reference_type == "waypoints":
+        waypoints = reference_config.get("waypoints", [])
+        if not waypoints:
+            raise ValueError("Waypoints reference mode requires `reference.waypoints` in simulation.yaml")
+        reference = build_waypoint_reference(waypoints, speed, dt)
+    else:
+        track = sim_config["track"]
+        reference = build_circular_reference(
+            n_points=n_points,
+            radius=float(track["radius"]),
+            speed=speed,
+            dt=dt,
+            center=tuple(track["center"]),
+            start_angle=float(track["start_angle"]),
+        )
+
+    if reference.shape[0] < n_points + 1:
+        extra_rows = np.tile(reference[-1:], (n_points + 1 - reference.shape[0], 1))
+        reference = np.vstack([reference, extra_rows])
+    return reference
 
 
 if __name__ == "__main__":

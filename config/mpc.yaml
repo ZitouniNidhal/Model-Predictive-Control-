@@ -2,6 +2,7 @@ dt: 0.1
 horizon: 15
 max_iters: 6
 wheelbase: 0.16
+obstacle_margin: 0.25
 
 weights:
   q_x: 5.0

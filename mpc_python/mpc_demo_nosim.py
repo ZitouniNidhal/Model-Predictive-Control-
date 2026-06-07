@@ -1,14 +1,13 @@
 import argparse
-from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
 from mpc_python.cvxpy_mpc import (
     IterativeMPC,
     build_circular_reference,
+    build_waypoint_reference,
     load_yaml,
     bicycle_model,
-    wrap_angle,
 )
 
 
@@ -16,6 +15,7 @@ def main():
     parser = argparse.ArgumentParser(description="Headless MPC no-simulation demo.")
     parser.add_argument("--config", default="config/mpc.yaml", help="Path to MPC configuration")
     parser.add_argument("--simulation", default="config/simulation.yaml", help="Path to simulation configuration")
+    parser.add_argument("--reference-mode", choices=["circle", "waypoints"], default=None, help="Override reference generation mode.")
     parser.add_argument("--obstacle-avoidance", action="store_true", help="Enable linearized obstacle constraints.")
     parser.add_argument("--start-offset", type=float, default=-0.5, help="Lateral offset from the initial reference point.")
     parser.add_argument("--start-speed", type=float, default=0.2, help="Initial vehicle speed.")
@@ -24,19 +24,11 @@ def main():
     mpc_config = load_yaml(args.config)
     sim_config = load_yaml(args.simulation)
 
-    track = sim_config["track"]
     horizon = int(mpc_config["horizon"])
     dt = float(mpc_config["dt"])
     max_steps = int(sim_config["simulation"].get("max_steps", 200))
 
-    reference = build_circular_reference(
-        n_points=max_steps + horizon,
-        radius=float(track["radius"]),
-        speed=float(track["speed"]),
-        dt=dt,
-        center=tuple(track["center"]),
-        start_angle=float(track["start_angle"]),
-    )
+    reference = generate_reference(sim_config, max_steps + horizon, dt, args.reference_mode)
 
     mpc = IterativeMPC(mpc_config)
     x = np.array(
@@ -84,6 +76,34 @@ def main():
             )
 
     plot_results(history, sim_config, args.obstacle_avoidance)
+
+
+def generate_reference(sim_config, n_points, dt, override_mode=None):
+    reference_config = sim_config.get("reference", {})
+    reference_type = override_mode or reference_config.get("type", "circle")
+    speed = float(reference_config.get("speed", sim_config.get("track", {}).get("speed", 1.5)))
+
+    if reference_type == "waypoints":
+        waypoints = reference_config.get("waypoints", [])
+        if not waypoints:
+            raise ValueError("Waypoints reference mode requires `reference.waypoints` in simulation.yaml")
+        reference = build_waypoint_reference(waypoints, speed, dt)
+    else:
+        track = sim_config["track"]
+        reference = build_circular_reference(
+            n_points=n_points,
+            radius=float(track["radius"]),
+            speed=speed,
+            dt=dt,
+            center=tuple(track["center"]),
+            start_angle=float(track["start_angle"]),
+        )
+
+    if reference.shape[0] < n_points + 1:
+        extra_rows = np.tile(reference[-1:], (n_points + 1 - reference.shape[0], 1))
+        reference = np.vstack([reference, extra_rows])
+
+    return reference
 
 
 def build_horizon_obstacle_sequence(sim_config, step, horizon, dt):
