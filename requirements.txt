@@ -3,4 +3,5 @@ scipy
 matplotlib
 PyYAML
 cvxpy
+osqp
 mujoco

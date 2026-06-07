@@ -48,6 +48,22 @@ def linearize_dynamics(state, control, dt, wheelbase):
     return A, B
 
 
+def normalize_vector(vector, eps=1e-6):
+    vector = np.asarray(vector, dtype=float)
+    norm = np.linalg.norm(vector)
+    if norm < eps:
+        return np.array([1.0, 0.0], dtype=float)
+    return vector / norm
+
+
+def linearize_obstacle_constraint(x_prev, center, radius, margin=0.25):
+    center = np.asarray(center, dtype=float)
+    position = np.asarray(x_prev[:2], dtype=float)
+    direction = normalize_vector(position - center)
+    threshold = center.dot(direction) + radius + margin
+    return direction, threshold
+
+
 def build_circular_reference(n_points, radius, speed, dt, center=(0.0, 0.0), start_angle=0.0):
     reference = []
     for k in range(n_points + 1):
@@ -56,4 +72,20 @@ def build_circular_reference(n_points, radius, speed, dt, center=(0.0, 0.0), sta
         y = center[1] + radius * math.sin(theta)
         yaw = wrap_angle(theta + math.pi / 2)
         reference.append([x, y, yaw, speed])
+    return np.array(reference, dtype=float)
+
+
+def build_waypoint_reference(waypoints, speed, dt):
+    points = np.asarray(waypoints, dtype=float)
+    if points.ndim != 2 or points.shape[1] != 2:
+        raise ValueError("Waypoints must be a list of [x, y] pairs.")
+
+    reference = []
+    for k in range(len(points)):
+        if k < len(points) - 1:
+            direction = points[k + 1] - points[k]
+        else:
+            direction = points[k] - points[k - 1]
+        yaw = wrap_angle(math.atan2(direction[1], direction[0]))
+        reference.append([points[k, 0], points[k, 1], yaw, speed])
     return np.array(reference, dtype=float)

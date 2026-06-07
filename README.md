@@ -32,14 +32,32 @@ conda activate mpc_python
 python mpc_python/mpc_demo_nosim.py
 ```
 
-3. If MuJoCo is installed, run the MuJoCo demo:
+3. Enable obstacle avoidance in the headless demo:
+
+```bash
+python mpc_python/mpc_demo_nosim.py --obstacle-avoidance
+```
+
+4. If MuJoCo is installed, run the MuJoCo demo:
 
 ```bash
 python mpc_python/mpc_demo_mujoco.py
 ```
 
+## Features
+
+- Iterative linearization around the bicycle model using CVXPY and OSQP
+- Support for quadratic state and input penalties
+- Steering rate constraints and obstacle avoidance through convexified halfspace constraints
+- A headless demo with trajectory plots, control input graphs, and tracking error visualization
+
+## Configuration
+
+- `config/mpc.yaml` contains MPC weighting and constraint parameters
+- `config/simulation.yaml` includes the reference path and obstacle definitions
+
 ## Notes
 
-- `mpc_demo_nosim.py` provides an accessible way to evaluate the iterative MPC without requiring MuJoCo.
-- `mpc_demo_mujoco.py` uses a lightweight placeholder model and will work when `mujoco` is installed.
-- The project is intentionally structured so you can extend the controller to real MuJoCo vehicle models.
+- `mpc_demo_nosim.py` is the easiest way to run the controller without MuJoCo.
+- `mpc_demo_mujoco.py` is a demo wrapper for a placeholder MuJoCo vehicle.
+- The obstacle avoidance demo uses moving obstacle predictions and sequential convexification.

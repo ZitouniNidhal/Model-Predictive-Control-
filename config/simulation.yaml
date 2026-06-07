@@ -11,6 +11,10 @@ obstacles:
   - type: static
     position: [-5.0, 2.0]
     radius: 0.7
+  - type: moving
+    start: [-6.0, -4.0]
+    velocity: [0.05, 0.08]
+    radius: 0.5
 
 simulation:
   max_steps: 200

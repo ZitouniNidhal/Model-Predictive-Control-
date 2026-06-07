@@ -1,5 +1,12 @@
 from .cvxpy_mpc import IterativeMPC
-from .utils import load_yaml, wrap_angle, bicycle_model, linearize_dynamics, build_circular_reference
+from .utils import (
+    load_yaml,
+    wrap_angle,
+    bicycle_model,
+    linearize_dynamics,
+    build_circular_reference,
+    build_waypoint_reference,
+)
 
 __all__ = [
     "IterativeMPC",
@@ -8,4 +15,5 @@ __all__ = [
     "bicycle_model",
     "linearize_dynamics",
     "build_circular_reference",
+    "build_waypoint_reference",
 ]
