@@ -1,0 +1,24 @@
+<mujoco model="mushr_toy">
+    <compiler angle="degree" coordinate="local"/>
+    <option timestep="0.02" gravity="0 0 0" integrator="Euler"/>
+
+    <asset>
+        <texture name="ground" type="checker" width="512" height="512" rgb1="0.8 0.8 0.8" rgb2="0.6 0.6 0.6"/>
+        <material name="mat_ground" texture="ground"/>
+    </asset>
+
+    <worldbody>
+        <geom name="plane" type="plane" pos="0 0 0" size="10 10 0.1" material="mat_ground"/>
+        <body name="car" pos="0 0 0.1">
+            <joint name="x" type="slide" axis="1 0 0"/>
+            <joint name="y" type="slide" axis="0 1 0"/>
+            <joint name="yaw" type="hinge" axis="0 0 1"/>
+            <geom name="chassis" type="box" pos="0 0 0" size="0.25 0.12 0.05" rgba="0 0.3 0.8 1"/>
+        </body>
+    </worldbody>
+
+    <actuator>
+        <motor name="drive" joint="x" gear="1"/>
+        <motor name="steer" joint="yaw" gear="0.5"/>
+    </actuator>
+</mujoco>
