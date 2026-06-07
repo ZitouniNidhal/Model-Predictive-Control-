@@ -1,0 +1,17 @@
+track:
+  radius: 8.0
+  speed: 1.5
+  center: [0.0, 0.0]
+  start_angle: 0.0
+
+obstacles:
+  - type: static
+    position: [4.0, 0.0]
+    radius: 0.7
+  - type: static
+    position: [-5.0, 2.0]
+    radius: 0.7
+
+simulation:
+  max_steps: 200
+  log_interval: 10

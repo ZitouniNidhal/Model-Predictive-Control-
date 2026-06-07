@@ -1,0 +1,23 @@
+dt: 0.1
+horizon: 15
+max_iters: 6
+wheelbase: 0.16
+
+weights:
+  q_x: 5.0
+  q_y: 5.0
+  q_yaw: 1.0
+  q_v: 0.1
+  r_a: 1.0
+  r_delta: 5.0
+  r_da: 15.0
+  r_ddelta: 10.0
+
+constraints:
+  v_min: 0.0
+  v_max: 3.0
+  a_min: -3.0
+  a_max: 2.0
+  delta_min: -0.5
+  delta_max: 0.5
+  ddelta_max: 0.3
