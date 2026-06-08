@@ -3,14 +3,6 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
-from mpc_python.cvxpy_mpc import (
-    IterativeMPC,
-    build_circular_reference,
-    build_waypoint_reference,
-    load_yaml,
-    bicycle_model,
-)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Headless MPC no-simulation demo.")
@@ -22,6 +14,10 @@ def main():
     parser.add_argument("--start-speed", type=float, default=0.2, help="Initial vehicle speed.")
     parser.add_argument("--save-log", type=str, default=None, help="Optional CSV file path to save state, control, and error history.")
     args = parser.parse_args()
+
+    # Lazy imports to avoid requiring CVXPY at module-import time
+    from mpc_python.cvxpy_mpc.cvxpy_mpc import IterativeMPC
+    from mpc_python.cvxpy_mpc.utils import load_yaml, bicycle_model
 
     mpc_config = load_yaml(args.config)
     sim_config = load_yaml(args.simulation)
@@ -84,6 +80,9 @@ def main():
 
 
 def generate_reference(sim_config, n_points, dt, override_mode=None):
+    # Lazy import of reference builders to keep module import lightweight
+    from mpc_python.cvxpy_mpc.utils import build_waypoint_reference, build_circular_reference
+
     reference_config = sim_config.get("reference", {})
     reference_type = override_mode or reference_config.get("type", "circle")
     speed = float(reference_config.get("speed", sim_config.get("track", {}).get("speed", 1.5)))
