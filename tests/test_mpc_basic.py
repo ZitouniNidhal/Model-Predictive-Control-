@@ -1,4 +1,8 @@
 import numpy as np
+import pytest
+
+# Skip this test when CVXPY isn't available in the environment
+pytest.importorskip("cvxpy")
 
 from mpc_python.cvxpy_mpc import IterativeMPC, build_circular_reference
 
