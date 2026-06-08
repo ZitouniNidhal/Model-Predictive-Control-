@@ -38,7 +38,13 @@ python mpc_python/mpc_demo_nosim.py
 python mpc_python/mpc_demo_nosim.py --obstacle-avoidance
 ```
 
-4. Run the MuJoCo demo if MuJoCo is installed:
+4. Save the simulation history to CSV:
+
+```bash
+python mpc_python/mpc_demo_nosim.py --save-log logs/mpc_history.csv
+```
+
+5. Run the MuJoCo demo if MuJoCo is installed:
 
 ```bash
 python mpc_python/mpc_demo_mujoco.py

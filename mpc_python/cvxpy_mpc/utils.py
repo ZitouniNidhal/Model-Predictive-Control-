@@ -1,12 +1,10 @@
 import math
-from pathlib import Path
 import numpy as np
 import yaml
 
 
 def load_yaml(path):
-    path = Path(path)
-    with path.open("r", encoding="utf-8") as handle:
+    with open(path, "r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
 
@@ -75,17 +73,38 @@ def build_circular_reference(n_points, radius, speed, dt, center=(0.0, 0.0), sta
     return np.array(reference, dtype=float)
 
 
-def build_waypoint_reference(waypoints, speed, dt):
+def build_waypoint_reference(waypoints, speed, dt, n_points=None):
     points = np.asarray(waypoints, dtype=float)
     if points.ndim != 2 or points.shape[1] != 2:
         raise ValueError("Waypoints must be a list of [x, y] pairs.")
+    if points.shape[0] < 2:
+        yaw = 0.0
+        return np.array([[points[0, 0], points[0, 1], yaw, speed]], dtype=float)
+
+    segments = np.diff(points, axis=0)
+    distances = np.linalg.norm(segments, axis=1)
+    total_length = np.sum(distances)
+    if total_length <= 0.0:
+        yaw = math.atan2(segments[-1, 1], segments[-1, 0])
+        return np.array([[points[0, 0], points[0, 1], wrap_angle(yaw), speed]], dtype=float)
+
+    if n_points is None:
+        n_points = int(max(1, math.ceil(total_length / (speed * dt))))
+
+    sample_distances = np.linspace(0.0, total_length, n_points + 1)
+    cumulative = np.concatenate([[0.0], np.cumsum(distances)])
 
     reference = []
-    for k in range(len(points)):
-        if k < len(points) - 1:
-            direction = points[k + 1] - points[k]
-        else:
-            direction = points[k] - points[k - 1]
-        yaw = wrap_angle(math.atan2(direction[1], direction[0]))
-        reference.append([points[k, 0], points[k, 1], yaw, speed])
+    segment_index = 0
+    for s in sample_distances:
+        while segment_index < len(distances) - 1 and s > cumulative[segment_index + 1]:
+            segment_index += 1
+
+        segment_dist = distances[segment_index]
+        offset = s - cumulative[segment_index]
+        ratio = offset / max(segment_dist, 1e-6)
+        position = points[segment_index] + ratio * segments[segment_index]
+        heading = math.atan2(segments[segment_index, 1], segments[segment_index, 0])
+        reference.append([position[0], position[1], wrap_angle(heading), speed])
+
     return np.array(reference, dtype=float)

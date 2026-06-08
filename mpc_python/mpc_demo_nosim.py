@@ -1,4 +1,5 @@
 import argparse
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -19,6 +20,7 @@ def main():
     parser.add_argument("--obstacle-avoidance", action="store_true", help="Enable linearized obstacle constraints.")
     parser.add_argument("--start-offset", type=float, default=-0.5, help="Lateral offset from the initial reference point.")
     parser.add_argument("--start-speed", type=float, default=0.2, help="Initial vehicle speed.")
+    parser.add_argument("--save-log", type=str, default=None, help="Optional CSV file path to save state, control, and error history.")
     args = parser.parse_args()
 
     mpc_config = load_yaml(args.config)
@@ -75,6 +77,9 @@ def main():
                 f"Step {step + 1:3d} | x={x[0]:.2f},{x[1]:.2f} yaw={x[2]:.2f} v={x[3]:.2f} error={history['error'][-1]:.3f}"
             )
 
+    if args.save_log:
+        save_history_csv(history, args.save_log)
+
     plot_results(history, sim_config, args.obstacle_avoidance)
 
 
@@ -130,6 +135,50 @@ def build_horizon_obstacle_sequence(sim_config, step, horizon, dt):
         horizon_sequence.append(step_obstacles)
 
     return horizon_sequence
+
+
+def save_history_csv(history, filename):
+    headers = [
+        "step",
+        "x",
+        "y",
+        "yaw",
+        "velocity",
+        "acceleration",
+        "steering",
+        "xref_x",
+        "xref_y",
+        "xref_yaw",
+        "xref_velocity",
+        "tracking_error",
+    ]
+
+    rows = []
+    for idx, state in enumerate(history["x"][:-1]):
+        control = history["u"][idx] if idx < len(history["u"]) else [np.nan, np.nan]
+        ref = history["xref"][idx]
+        error = history["error"][idx] if idx < len(history["error"]) else np.nan
+        rows.append([
+            idx,
+            state[0],
+            state[1],
+            state[2],
+            state[3],
+            control[0],
+            control[1],
+            ref[0],
+            ref[1],
+            ref[2],
+            ref[3],
+            error,
+        ])
+
+    with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+    print(f"Saved MPC history to {filename}")
 
 
 def plot_results(history, sim_config, obstacle_avoidance):

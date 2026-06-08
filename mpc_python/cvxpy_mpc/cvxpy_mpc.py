@@ -10,6 +10,8 @@ class IterativeMPC:
         self.max_iters = int(config.get("max_iters", 5))
         self.wheelbase = float(config.get("wheelbase", 0.16))
         self.obstacle_margin = float(config.get("obstacle_margin", 0.25))
+        self.obstacle_slack = bool(config.get("obstacle_slack", True))
+        self.obstacle_slack_weight = float(config.get("obstacle_slack_weight", 100.0))
         self.solver_options = config.get("solver_options", {})
 
         weights = config.get("weights", {})
@@ -45,6 +47,7 @@ class IterativeMPC:
 
         constraints = [x[0, :] == x0]
         cost = 0.0
+        slack_vars = []
 
         if obstacles is None:
             obstacle_sequence = [None] * (N + 1)
@@ -61,7 +64,9 @@ class IterativeMPC:
             constraints += [self.a_min <= u[k, 0], u[k, 0] <= self.a_max]
             constraints += [self.delta_min <= u[k, 1], u[k, 1] <= self.delta_max]
 
-            if k > 0:
+            if k == 0:
+                constraints += [cp.abs(u[0, 1] - u_prev[0, 1]) <= self.ddelta_max]
+            else:
                 constraints += [cp.abs(u[k, 1] - u[k - 1, 1]) <= self.ddelta_max]
 
             if obstacle_sequence[k] is not None:
@@ -69,7 +74,12 @@ class IterativeMPC:
                     direction, threshold = linearize_obstacle_constraint(
                         x_prev[k], obstacle["center"], float(obstacle["radius"]), margin=self.obstacle_margin
                     )
-                    constraints += [direction[0] * x[k, 0] + direction[1] * x[k, 1] >= threshold]
+                    if self.obstacle_slack:
+                        epsilon = cp.Variable(nonneg=True)
+                        slack_vars.append(epsilon)
+                        constraints += [direction[0] * x[k, 0] + direction[1] * x[k, 1] + epsilon >= threshold]
+                    else:
+                        constraints += [direction[0] * x[k, 0] + direction[1] * x[k, 1] >= threshold]
 
             dx = x[k, :] - ref_traj[k, :]
             cost += cp.quad_form(dx, self.Q)
@@ -83,7 +93,15 @@ class IterativeMPC:
                 direction, threshold = linearize_obstacle_constraint(
                     x_prev[N], obstacle["center"], float(obstacle["radius"]), margin=self.obstacle_margin
                 )
-                constraints += [direction[0] * x[N, 0] + direction[1] * x[N, 1] >= threshold]
+                if self.obstacle_slack:
+                    epsilon = cp.Variable(nonneg=True)
+                    slack_vars.append(epsilon)
+                    constraints += [direction[0] * x[N, 0] + direction[1] * x[N, 1] + epsilon >= threshold]
+                else:
+                    constraints += [direction[0] * x[N, 0] + direction[1] * x[N, 1] >= threshold]
+
+        if self.obstacle_slack and slack_vars:
+            cost += self.obstacle_slack_weight * cp.sum(slack_vars)
 
         dx_terminal = x[N, :] - ref_traj[N, :]
         cost += cp.quad_form(dx_terminal, self.Qf)
