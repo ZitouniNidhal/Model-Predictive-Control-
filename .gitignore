@@ -11,3 +11,9 @@ venv/
 dist/
 build/
 *.egg-info/
+logs/
+.mujoco/
+.mujoco2/
+.env
+*.sqlite3
+*.log
