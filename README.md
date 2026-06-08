@@ -137,3 +137,5 @@ This project is provided as-is for demonstration and education. Add an appropria
 
 ---
 If you'd like, I can add a GitHub Actions workflow to run tests on push, include a CI badge in this README, or further expand the Usage section with sample `config/` snippets.
+ 
+![CI](https://github.com/ZitouniNidhal/Model-Predictive-Control-/actions/workflows/python-app.yml/badge.svg)
