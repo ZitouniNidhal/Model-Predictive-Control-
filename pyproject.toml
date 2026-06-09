@@ -14,7 +14,7 @@ dependencies = [
   "mujoco",
 ]
 authors = [
-  { name = "ZitouniNidhal" },
+  { name = "Nidhal Zitouni" },
 ]
 
 [build-system]
