@@ -59,15 +59,18 @@ def main():
         ref_index = min(step, len(reference) - horizon - 1)
         ref_segment = reference[ref_index : ref_index + horizon + 1]
         x_pred, u_opt = mpc.solve(x_state, ref_segment, u_init=u_prev)
-        u_cmd = u_opt[0]
+        if u_opt is None or len(u_opt) == 0:
+            print("MPC failed to produce a valid control sequence. Ending MuJoCo demo.")
+            break
 
+        u_cmd = np.asarray(u_opt[0], dtype=float)
         data.ctrl[0] = float(u_cmd[0])
         data.ctrl[1] = float(u_cmd[1])
 
         mujoco.mj_step(model, data)
         viewer.render()
         time.sleep(dt)
-        u_prev = np.array(u_opt, dtype=float)
+        u_prev = np.vstack([u_opt[1:], u_opt[-1:]]) if len(u_opt) > 1 else np.array(u_opt, dtype=float)
         step += 1
 
     viewer.close()

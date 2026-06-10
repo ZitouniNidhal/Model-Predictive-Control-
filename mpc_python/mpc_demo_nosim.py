@@ -57,11 +57,12 @@ def main():
 
         x_pred, u_opt = mpc.solve(x, ref_segment, u_init=u_prev, obstacles=obstacles)
         if u_opt is None or len(u_opt) == 0:
+            print("MPC failed to find a feasible control sequence. Stopping simulation.")
             break
 
-        u_cmd = u_opt[0]
+        u_cmd = np.asarray(u_opt[0], dtype=float)
         x = bicycle_model(x, u_cmd, dt, float(mpc_config.get("wheelbase", 0.16)))
-        u_prev = np.vstack([u_opt[1:], u_opt[-1:]])
+        u_prev = np.vstack([u_opt[1:], u_opt[-1:]]) if len(u_opt) > 1 else np.array(u_opt, dtype=float)
 
         history["x"].append(x.copy())
         history["u"].append(u_cmd.copy())
@@ -153,9 +154,11 @@ def save_history_csv(history, filename):
     ]
 
     rows = []
-    for idx, state in enumerate(history["x"][:-1]):
+    n_rows = max(len(history["x"]), len(history["xref"]))
+    for idx in range(n_rows):
+        state = history["x"][idx] if idx < len(history["x"]) else [np.nan, np.nan, np.nan, np.nan]
         control = history["u"][idx] if idx < len(history["u"]) else [np.nan, np.nan]
-        ref = history["xref"][idx]
+        ref = history["xref"][idx] if idx < len(history["xref"]) else [np.nan, np.nan, np.nan, np.nan]
         error = history["error"][idx] if idx < len(history["error"]) else np.nan
         rows.append([
             idx,

@@ -4,15 +4,18 @@ import yaml
 
 
 def load_yaml(path):
+    """Load YAML configuration from disk."""
     with open(path, "r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
 
 def wrap_angle(angle):
+    """Normalize an angle to the interval [-pi, pi]."""
     return (angle + math.pi) % (2 * math.pi) - math.pi
 
 
 def bicycle_model(state, control, dt, wheelbase):
+    """Simple bicycle kinematic model for one integration step."""
     x, y, yaw, v = state
     a, delta = control
     x_next = x + v * math.cos(yaw) * dt
@@ -23,6 +26,7 @@ def bicycle_model(state, control, dt, wheelbase):
 
 
 def linearize_dynamics(state, control, dt, wheelbase):
+    """Compute state and input Jacobians for the bicycle model."""
     x, y, yaw, v = state
     a, delta = control
     cos_yaw = math.cos(yaw)
@@ -47,6 +51,7 @@ def linearize_dynamics(state, control, dt, wheelbase):
 
 
 def normalize_vector(vector, eps=1e-6):
+    """Return a normalized 2D vector, with a safe fallback for zero magnitude."""
     vector = np.asarray(vector, dtype=float)
     norm = np.linalg.norm(vector)
     if norm < eps:
@@ -55,6 +60,7 @@ def normalize_vector(vector, eps=1e-6):
 
 
 def linearize_obstacle_constraint(x_prev, center, radius, margin=0.25):
+    """Linearize a circular obstacle constraint around the current state."""
     center = np.asarray(center, dtype=float)
     position = np.asarray(x_prev[:2], dtype=float)
     direction = normalize_vector(position - center)
@@ -63,6 +69,7 @@ def linearize_obstacle_constraint(x_prev, center, radius, margin=0.25):
 
 
 def build_circular_reference(n_points, radius, speed, dt, center=(0.0, 0.0), start_angle=0.0):
+    """Build a circular reference trajectory for the vehicle."""
     reference = []
     for k in range(n_points + 1):
         theta = start_angle + (speed / radius) * k * dt
@@ -74,6 +81,7 @@ def build_circular_reference(n_points, radius, speed, dt, center=(0.0, 0.0), sta
 
 
 def build_waypoint_reference(waypoints, speed, dt, n_points=None):
+    """Build a reference trajectory by interpolating through waypoints."""
     points = np.asarray(waypoints, dtype=float)
     if points.ndim != 2 or points.shape[1] != 2:
         raise ValueError("Waypoints must be a list of [x, y] pairs.")

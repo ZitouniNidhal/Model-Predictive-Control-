@@ -1,10 +1,12 @@
+import os
+
 import numpy as np
 import pytest
 
-# Skip this test when CVXPY isn't available in the environment
+# Skip tests when CVXPY is not installed in this environment.
 pytest.importorskip("cvxpy")
 
-from mpc_python.cvxpy_mpc import IterativeMPC, build_circular_reference
+from mpc_python.cvxpy_mpc import IterativeMPC, build_circular_reference, build_waypoint_reference, load_yaml
 
 
 def test_iterative_mpc_smoke():
@@ -39,5 +41,30 @@ def test_iterative_mpc_smoke():
     x0 = np.array([0.0, 0.0, 0.0, 0.1])
     _, u = mpc.solve(x0, reference[: cfg["horizon"] + 1], u_init=np.zeros((cfg["horizon"], 2)))
 
+    assert u is not None
     assert u.shape == (cfg["horizon"], 2)
     assert np.all(np.isfinite(u))
+
+
+def test_build_waypoint_reference():
+    waypoints = [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0]]
+    reference = build_waypoint_reference(waypoints, speed=1.0, dt=0.1)
+
+    assert reference.shape[1] == 4
+    assert np.isclose(reference[0, 0], 0.0)
+    assert np.isclose(reference[-1, 1], 2.0)
+
+
+def test_load_yaml(tmp_path):
+    sample = {
+        "dt": 0.1,
+        "horizon": 10,
+        "weights": {"q_x": 1.0},
+    }
+    yaml_path = tmp_path / "sample.yaml"
+    yaml_path.write_text("dt: 0.1\nhorizon: 10\nweights:\n  q_x: 1.0\n", encoding="utf-8")
+
+    loaded = load_yaml(str(yaml_path))
+    assert loaded["dt"] == sample["dt"]
+    assert loaded["horizon"] == sample["horizon"]
+    assert loaded["weights"]["q_x"] == 1.0

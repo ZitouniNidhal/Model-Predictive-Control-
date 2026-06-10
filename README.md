@@ -1,71 +1,54 @@
-# mpc_python
+# Model Predictive Control (MPC) Demo
 
-Iterative Model Predictive Control (MPC) for a bicycle-like vehicle, built to support research, learning, and rapid prototyping.
+Iterative Model Predictive Control for a bicycle-like vehicle, built for research, learning, and rapid prototyping.
 
-This repository demonstrates an iterative convex MPC workflow using CVXPY and OSQP. It includes a headless simulation mode for analysis and logging, plus an optional MuJoCo visualization path for interactive control experiments.
+This repository demonstrates an iterative convex MPC workflow using CVXPY and OSQP. It includes a headless simulation mode for analysis and logging, plus an optional MuJoCo visualization demo.
 
 ## Why this repository exists
 
 The goal is to provide a compact, research-friendly implementation of:
 
-- a simple bicycle kinematic model,
+- a bicycle kinematic model,
 - iterative linearization-based MPC,
-- quadratic cost optimization over a finite horizon,
-- optional obstacle avoidance via linearized constraints,
-- interpretable reference generation for circular and waypoint trajectories.
+- quadratic cost optimization over a prediction horizon,
+- obstacle avoidance through convexified constraints,
+- reference generation for circular and waypoint trajectories.
 
-This repository is useful for AI and control research because it keeps the core algorithm readable while supporting reproducibility and experiment variation.
+The implementation is designed for rapid experimentation, reproducibility, and easy extension.
 
 ## Key features
 
-- Iterative model predictive control with warm-started optimization
-- Headless no-simulation demo with plot output and CSV logging
-- Obstacle avoidance through convexified linear constraints
-- Optional MuJoCo demo for visualization and interactive playback
-- Lightweight utility functions for dynamics, linearization, and reference generation
-- Simple test coverage for solver integration and logging utilities
+- Iterative MPC with warm-started optimization
+- Headless simulation demo with plotting and CSV logging
+- Optional obstacle avoidance via linearized constraints
+- MuJoCo visualization demo for interactive playback
+- Lightweight utility modules for dynamics, linearization, and reference generation
+- Basic unit tests for solver and utility behavior
 
 ## Repository structure
 
 - `config/`
-  - `mpc.yaml` — MPC hyperparameters, weights, constraints, solver options
-  - `simulation.yaml` — reference path, track, obstacle, and simulation settings
+  - `mpc.yaml` — MPC configuration and solver weights
+  - `simulation.yaml` — reference path, track, and obstacle settings
 - `mpc_python/cvxpy_mpc/`
   - `cvxpy_mpc.py` — iterative convex MPC implementation
-  - `utils.py` — bicycle model, linearization, obstacle handling, and reference builders
-- `mpc_python/models/mushr/mushr.xml` — lightweight MuJoCo model used by the visual demo
+  - `utils.py` — bicycle dynamics, linearization, obstacle handling, and references
+- `mpc_python/models/mushr/mushr.xml` — MuJoCo model for the visualization demo
 - `mpc_python/mpc_demo_nosim.py` — headless simulation entry point
 - `mpc_python/mpc_demo_mujoco.py` — MuJoCo visualization entry point
-- `tests/` — small unit tests for MPC integration and CSV export
-
-## Research context
-
-This demo is designed for researchers and students exploring how iterative MPC behaves under:
-
-- finite-horizon trajectory tracking,
-- reference path following,
-- actuator and state constraints,
-- convexified obstacle avoidance,
-- solver performance and feasibility.
-
-It is especially well suited for experiments in:
-
-- control theory education,
-- robotics and autonomous driving prototyping,
-- algorithm comparison against other MPC formulations,
-- sensitivity analysis of weights, horizons, and constraints.
+- `tests/` — automated tests
 
 ## Installation
 
 Recommended Python version: `3.11+`.
 
-Install dependencies using pip:
+Install dependencies:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-Or, create a Conda environment from the provided YAML:
+Or create a Conda environment:
 
 ```bash
 conda env create -f env.yml
@@ -73,7 +56,7 @@ conda activate mpc_python
 python -m pip install -r requirements.txt
 ```
 
-Install the package locally for importable usage:
+Install the package locally:
 
 ```bash
 python -m pip install -e .
@@ -87,7 +70,7 @@ python -m pip install -e .
 python mpc_python/mpc_demo_nosim.py
 ```
 
-This mode runs the MPC controller in simulation, plots the executed trajectory, control signals, and tracking error, and can optionally save history to CSV.
+This runs the MPC controller in simulation, plots trajectory and control signals, and optionally saves history to CSV.
 
 ### Headless demo with CSV output
 
@@ -107,7 +90,7 @@ python mpc_python/mpc_demo_nosim.py --obstacle-avoidance
 python mpc_python/mpc_demo_mujoco.py
 ```
 
-This requires a working MuJoCo installation and proper MuJoCo environment variables.
+MuJoCo requires a working installation and proper environment variables.
 
 ## Command-line options
 
@@ -115,81 +98,75 @@ This requires a working MuJoCo installation and proper MuJoCo environment variab
 
 - `--config` — path to `config/mpc.yaml`
 - `--simulation` — path to `config/simulation.yaml`
-- `--reference-mode` — override reference mode: `circle` or `waypoints`
-- `--obstacle-avoidance` — enable linearized obstacle constraints
-- `--start-offset` — initial lateral offset from the reference path
-- `--start-speed` — initial vehicle speed
-- `--save-log` — save state, control, and error history as CSV
+- `--reference-mode` — `circle` or `waypoints`
+- `--obstacle-avoidance` — enable obstacle avoidance
+- `--start-offset` — initial lateral offset from the reference
+- `--start-speed` — initial speed
+- `--save-log` — CSV file path for history
 
 `mpc_demo_mujoco.py` supports:
 
 - `--config` — path to `config/mpc.yaml`
 - `--simulation` — path to `config/simulation.yaml`
-- `--reference-mode` — override reference mode for MuJoCo demo
+- `--reference-mode` — `circle` or `waypoints`
 
 ## Configuration details
 
 ### `config/mpc.yaml`
 
-Key sections:
+Key options:
 
 - `dt` — control time step
 - `horizon` — prediction horizon length
-- `weights` — tracking and control penalties (`q_x`, `q_y`, `q_yaw`, `q_v`, `r_a`, `r_delta`, `r_da`, `r_ddelta`)
+- `weights` — penalties on tracking and control effort
 - `constraints` — velocity, acceleration, steering, and steering rate limits
 - `solver_options` — optional CVXPY solver settings
-- `obstacle_margin` — safe distance for obstacle avoidance
-- `obstacle_slack` — allow soft obstacle constraints with slack variables
-- `obstacle_slack_weight` — penalty weight for slack violations
+- `obstacle_margin` — safety buffer for obstacle avoidance
+- `obstacle_slack` — enable soft obstacle constraints
+- `obstacle_slack_weight` — penalty for slack violation
 
 ### `config/simulation.yaml`
 
-Key sections:
+Key options:
 
-- `reference` — type and speed definitions for `circle` or `waypoints`
-- `track` — circular track parameters: center, radius, start angle
+- `reference` — circle or waypoints reference mode
+- `track` — circular track parameters
 - `obstacles` — static and moving obstacle definitions
-- `simulation` — runtime options such as `max_steps` and `log_interval`
+- `simulation` — `max_steps` and `log_interval`
 
 ## Core algorithm overview
 
-1. Generate a reference trajectory from either a circular path or a waypoint sequence.
-2. Initialize the vehicle state and a warm-start control sequence.
-3. Linearize the bicycle dynamics around the current predicted trajectory.
-4. Formulate a convex quadratic program with state and input constraints.
-5. Solve the QP with OSQP and update the control sequence.
-6. Apply the first control command, simulate forward, and repeat.
-
-This iterative linearization scheme makes the controller easier to inspect while still supporting nonlinear vehicle kinematics.
+1. Create a reference trajectory from a circular path or waypoints.
+2. Initialize vehicle state and warm-start inputs.
+3. Linearize the bicycle dynamics around the predicted trajectory.
+4. Build a convex QP with state, control, and obstacle constraints.
+5. Solve the QP using OSQP and update the control sequence.
+6. Apply the first command, simulate one step, and repeat.
 
 ## Package API
 
-The package exports:
+Main exports:
 
-- `mpc_python.cvxpy_mpc.IterativeMPC`
-- `mpc_python.cvxpy_mpc.utils.load_yaml`
-- `mpc_python.cvxpy_mpc.utils.bicycle_model`
-- `mpc_python.cvxpy_mpc.utils.linearize_dynamics`
-- `mpc_python.cvxpy_mpc.utils.build_circular_reference`
-- `mpc_python.cvxpy_mpc.utils.build_waypoint_reference`
-
-This allows the core solver and utilities to be reused in research scripts and notebooks.
+- `mpc_python.IterativeMPC`
+- `mpc_python.load_yaml`
+- `mpc_python.bicycle_model`
+- `mpc_python.linearize_dynamics`
+- `mpc_python.build_circular_reference`
+- `mpc_python.build_waypoint_reference`
 
 ## Testing
 
-Run tests with:
+Run the test suite with:
 
 ```bash
 python -m pytest -q
 ```
 
-The repository includes lightweight tests for the MPC interface and the CSV export helper.
-
 ## Troubleshooting
 
-### CVXPY missing
+### Missing CVXPY
 
-If the MPC import fails because `cvxpy` is not installed:
+Install CVXPY and OSQP if the solver import fails:
 
 ```bash
 python -m pip install cvxpy osqp
@@ -197,7 +174,8 @@ python -m pip install cvxpy osqp
 
 ### MuJoCo issues
 
-If the MuJoCo demo fails to launch, verify that:
+If MuJoCo fails to launch, verify the installation and environment variables.
+
 
 - the `mujoco` Python package is installed,
 - MuJoCo binaries are installed on your machine,

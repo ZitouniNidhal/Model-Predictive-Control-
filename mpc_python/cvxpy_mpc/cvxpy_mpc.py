@@ -122,16 +122,20 @@ class IterativeMPC:
 
         for _ in range(self.max_iters):
             problem, x_var, u_var = self._build_problem(x0, ref_traj, x_prev, u_prev, obstacles=obstacles)
-            problem.solve(solver=cp.OSQP, warm_start=True, verbose=False, **self.solver_options)
+            try:
+                problem.solve(solver=cp.OSQP, warm_start=True, verbose=False, **self.solver_options)
+            except cp.error.SolverError:
+                return None, None
+
             if problem.status not in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
-                break
+                return None, None
 
             if u_var.value is None:
-                break
+                return None, None
 
             u_solution = np.array(u_var.value, dtype=float)
             if np.any(np.isnan(u_solution)):
-                break
+                return None, None
 
             u_prev = u_solution
             x_prev[0, :] = x0
