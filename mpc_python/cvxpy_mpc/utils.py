@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import yaml
+from scipy.interpolate import CubicSpline
 
 
 def load_yaml(path):
@@ -80,11 +81,21 @@ def build_circular_reference(n_points, radius, speed, dt, center=(0.0, 0.0), sta
     return np.array(reference, dtype=float)
 
 
-def build_waypoint_reference(waypoints, speed, dt, n_points=None):
-    """Build a reference trajectory by interpolating through waypoints."""
+def build_waypoint_reference(waypoints, speed, dt, n_points=None, a_lat_max=1.5):
+    """Build a reference trajectory by interpolating through waypoints using cubic splines."""
     points = np.asarray(waypoints, dtype=float)
     if points.ndim != 2 or points.shape[1] != 2:
         raise ValueError("Waypoints must be a list of [x, y] pairs.")
+    if points.shape[0] < 2:
+        yaw = 0.0
+        return np.array([[points[0, 0], points[0, 1], yaw, speed]], dtype=float)
+
+    # Remove duplicates or near-duplicates to avoid singular values in spline parametrization
+    filtered_points = [points[0]]
+    for p in points[1:]:
+        if np.linalg.norm(p - filtered_points[-1]) > 1e-4:
+            filtered_points.append(p)
+    points = np.array(filtered_points, dtype=float)
     if points.shape[0] < 2:
         yaw = 0.0
         return np.array([[points[0, 0], points[0, 1], yaw, speed]], dtype=float)
@@ -93,26 +104,45 @@ def build_waypoint_reference(waypoints, speed, dt, n_points=None):
     distances = np.linalg.norm(segments, axis=1)
     total_length = np.sum(distances)
     if total_length <= 0.0:
-        yaw = math.atan2(segments[-1, 1], segments[-1, 0])
-        return np.array([[points[0, 0], points[0, 1], wrap_angle(yaw), speed]], dtype=float)
+        return np.array([[points[0, 0], points[0, 1], 0.0, speed]], dtype=float)
+
+    cumulative = np.concatenate([[0.0], np.cumsum(distances)])
+
+    # Setup Cubic Splines for x and y parametrized by cumulative distance s
+    cs_x = CubicSpline(cumulative, points[:, 0], bc_type='natural')
+    cs_y = CubicSpline(cumulative, points[:, 1], bc_type='natural')
 
     if n_points is None:
         n_points = int(max(1, math.ceil(total_length / (speed * dt))))
 
     sample_distances = np.linspace(0.0, total_length, n_points + 1)
-    cumulative = np.concatenate([[0.0], np.cumsum(distances)])
 
     reference = []
-    segment_index = 0
     for s in sample_distances:
-        while segment_index < len(distances) - 1 and s > cumulative[segment_index + 1]:
-            segment_index += 1
+        x = float(cs_x(s))
+        y = float(cs_y(s))
+        dx = float(cs_x(s, 1))
+        dy = float(cs_y(s, 1))
+        ddx = float(cs_x(s, 2))
+        ddy = float(cs_y(s, 2))
 
-        segment_dist = distances[segment_index]
-        offset = s - cumulative[segment_index]
-        ratio = offset / max(segment_dist, 1e-6)
-        position = points[segment_index] + ratio * segments[segment_index]
-        heading = math.atan2(segments[segment_index, 1], segments[segment_index, 0])
-        reference.append([position[0], position[1], wrap_angle(heading), speed])
+        heading = math.atan2(dy, dx)
+
+        # Compute curvature kappa
+        denom = (dx**2 + dy**2)**1.5
+        if denom > 1e-6:
+            kappa = abs(dx * ddy - dy * ddx) / denom
+        else:
+            kappa = 0.0
+
+        # Curvature-aware speed profiling
+        # v_ref = limit speed in sharp corners based on lateral acceleration limit
+        if kappa > 1e-3:
+            v_ref = min(speed, math.sqrt(a_lat_max / kappa))
+        else:
+            v_ref = speed
+        v_ref = max(0.3 * speed, v_ref)  # keep speed at least 30% of target to avoid stalling
+
+        reference.append([x, y, wrap_angle(heading), v_ref])
 
     return np.array(reference, dtype=float)
