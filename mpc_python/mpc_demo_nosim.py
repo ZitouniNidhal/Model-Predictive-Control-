@@ -13,6 +13,7 @@ def main():
     parser.add_argument("--start-offset", type=float, default=-0.5, help="Lateral offset from the initial reference point.")
     parser.add_argument("--start-speed", type=float, default=0.2, help="Initial vehicle speed.")
     parser.add_argument("--save-log", type=str, default=None, help="Optional CSV file path to save state, control, and error history.")
+    parser.add_argument("--animate", action="store_true", help="Show real-time animation of the MPC controller.")
     args = parser.parse_args()
 
     # Lazy imports to avoid requiring CVXPY at module-import time
@@ -46,6 +47,36 @@ def main():
         "error": [],
     }
 
+    # Initialize animation if requested
+    if args.animate:
+        plt.ion()
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.plot(reference[:, 0], reference[:, 1], "k--", label="Reference Path", alpha=0.5)
+        
+        # Plot obstacles
+        obstacles_list = sim_config.get("obstacles", [])
+        moving_circles = []
+        moving_obs_data = []
+        for obs in obstacles_list:
+            if obs.get("type") == "static":
+                circle = plt.Circle(obs["position"], obs["radius"], color="r", alpha=0.3)
+                ax.add_patch(circle)
+                ax.text(obs["position"][0], obs["position"][1], "static", color="r", ha="center", va="center", fontsize=8)
+            elif obs.get("type") == "moving":
+                circle = plt.Circle(obs["start"], obs["radius"], color="orange", alpha=0.3)
+                ax.add_patch(circle)
+                moving_circles.append(circle)
+                moving_obs_data.append(obs)
+        
+        traj_line, = ax.plot([], [], "b-", linewidth=2, label="Vehicle Trajectory")
+        horizon_line, = ax.plot([], [], "g-o", linewidth=1.5, label="MPC Horizon")
+        car_marker, = ax.plot([], [], "ro", markersize=8, label="Vehicle")
+        
+        ax.set_aspect("equal")
+        ax.grid(True)
+        ax.legend()
+        ax.set_title("MPC Real-Time Animation")
+
     for step in range(max_steps):
         ref_segment = reference[step : step + horizon + 1]
         if ref_segment.shape[0] < horizon + 1:
@@ -69,10 +100,37 @@ def main():
         history["xref"].append(ref_segment[1].copy())
         history["error"].append(np.linalg.norm(x[:2] - ref_segment[1, :2]))
 
+        if args.animate:
+            # Update trajectory lines
+            x_history = np.array(history["x"])
+            traj_line.set_data(x_history[:, 0], x_history[:, 1])
+            if x_pred is not None:
+                horizon_line.set_data(x_pred[:, 0], x_pred[:, 1])
+            car_marker.set_data([x[0]], [x[1]])
+            
+            # Update moving obstacles centers
+            for circle, obs in zip(moving_circles, moving_obs_data):
+                start = np.asarray(obs["start"], dtype=float)
+                velocity = np.asarray(obs["velocity"], dtype=float)
+                current_center = start + velocity * (step * dt)
+                circle.set_center(current_center)
+            
+            # Auto-zoom/pan following the vehicle
+            ax.set_xlim(x[0] - 8, x[0] + 8)
+            ax.set_ylim(x[1] - 8, x[1] + 8)
+            
+            fig.canvas.draw()
+            fig.canvas.flush_events()
+            plt.pause(0.01)
+
         if (step + 1) % int(sim_config["simulation"].get("log_interval", 10)) == 0:
             print(
                 f"Step {step + 1:3d} | x={x[0]:.2f},{x[1]:.2f} yaw={x[2]:.2f} v={x[3]:.2f} error={history['error'][-1]:.3f}"
             )
+
+    if args.animate:
+        plt.ioff()
+        plt.close(fig)
 
     if args.save_log:
         save_history_csv(history, args.save_log)
