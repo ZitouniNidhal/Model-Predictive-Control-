@@ -53,6 +53,16 @@ def test_build_waypoint_reference():
     assert np.isclose(reference[-1, 1], 2.0)
 
 
+def test_build_waypoint_reference_curvature():
+    waypoints = [[0.0, 0.0], [5.0, 0.0], [5.0, 5.0]]
+    reference = build_waypoint_reference(waypoints, speed=2.0, dt=0.1)
+
+    assert reference.shape[1] == 4
+    speeds = reference[:, 3]
+    assert np.any(speeds < 2.0)
+    assert np.all(speeds >= 0.6)
+
+
 def test_load_yaml(tmp_path):
     sample = {
         "dt": 0.1,
