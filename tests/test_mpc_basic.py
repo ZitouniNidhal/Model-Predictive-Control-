@@ -4,7 +4,7 @@ import pytest
 # Skip tests when CVXPY is not installed in this environment.
 pytest.importorskip("cvxpy")
 
-from mpc_python.cvxpy_mpc import IterativeMPC, build_circular_reference, build_waypoint_reference, load_yaml
+from mpc_python.cvxpy_mpc import IterativeMPC, build_circular_reference, build_waypoint_reference, build_figure8_reference, load_yaml
 
 
 def test_iterative_mpc_smoke():
@@ -76,3 +76,12 @@ def test_load_yaml(tmp_path):
     assert loaded["dt"] == sample["dt"]
     assert loaded["horizon"] == sample["horizon"]
     assert loaded["weights"]["q_x"] == 1.0
+
+
+def test_build_figure8_reference():
+    reference = build_figure8_reference(n_points=150, speed=1.5, dt=0.1)
+    assert reference.shape[0] == 151
+    assert reference.shape[1] == 4
+    # Ensure speed profiling occurred in corners
+    speeds = reference[:, 3]
+    assert np.any(speeds < 1.5)
