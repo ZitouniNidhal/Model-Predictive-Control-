@@ -8,6 +8,7 @@ from .cvxpy_mpc.utils import (
     linearize_dynamics,
     build_circular_reference,
     build_waypoint_reference,
+    build_figure8_reference,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "linearize_dynamics",
     "build_circular_reference",
     "build_waypoint_reference",
+    "build_figure8_reference",
 ]

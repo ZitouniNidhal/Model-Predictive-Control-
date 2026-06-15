@@ -8,7 +8,7 @@ def main():
     parser = argparse.ArgumentParser(description="Headless MPC no-simulation demo.")
     parser.add_argument("--config", default="config/mpc.yaml", help="Path to MPC configuration")
     parser.add_argument("--simulation", default="config/simulation.yaml", help="Path to simulation configuration")
-    parser.add_argument("--reference-mode", choices=["circle", "waypoints"], default=None, help="Override reference generation mode.")
+    parser.add_argument("--reference-mode", choices=["circle", "waypoints", "figure8"], default=None, help="Override reference generation mode.")
     parser.add_argument("--obstacle-avoidance", action="store_true", help="Enable linearized obstacle constraints.")
     parser.add_argument("--start-offset", type=float, default=-0.5, help="Lateral offset from the initial reference point.")
     parser.add_argument("--start-speed", type=float, default=0.2, help="Initial vehicle speed.")
@@ -88,12 +88,17 @@ def main():
 
         x_pred, u_opt = mpc.solve(x, ref_segment, u_init=u_prev, obstacles=obstacles)
         if u_opt is None or len(u_opt) == 0:
-            print("MPC failed to find a feasible control sequence. Stopping simulation.")
-            break
+            # Fallback action: apply max deceleration, straight steering
+            a_min = float(mpc_config.get("constraints", {}).get("a_min", -3.0))
+            u_cmd = np.array([a_min, 0.0], dtype=float)
+            x_pred = None
+            print(f"Warning: MPC failed to find a solution at step {step}. Applying safety fallback deceleration command: {u_cmd}")
+            u_prev = np.zeros((horizon, 2), dtype=float)
+        else:
+            u_cmd = np.asarray(u_opt[0], dtype=float)
+            u_prev = np.vstack([u_opt[1:], u_opt[-1:]]) if len(u_opt) > 1 else np.array(u_opt, dtype=float)
 
-        u_cmd = np.asarray(u_opt[0], dtype=float)
         x = bicycle_model(x, u_cmd, dt, float(mpc_config.get("wheelbase", 0.16)))
-        u_prev = np.vstack([u_opt[1:], u_opt[-1:]]) if len(u_opt) > 1 else np.array(u_opt, dtype=float)
 
         history["x"].append(x.copy())
         history["u"].append(u_cmd.copy())
@@ -140,7 +145,7 @@ def main():
 
 def generate_reference(sim_config, n_points, dt, override_mode=None):
     # Lazy import of reference builders to keep module import lightweight
-    from mpc_python.cvxpy_mpc.utils import build_waypoint_reference, build_circular_reference
+    from mpc_python.cvxpy_mpc.utils import build_waypoint_reference, build_circular_reference, build_figure8_reference
 
     reference_config = sim_config.get("reference", {})
     reference_type = override_mode or reference_config.get("type", "circle")
@@ -151,6 +156,8 @@ def generate_reference(sim_config, n_points, dt, override_mode=None):
         if not waypoints:
             raise ValueError("Waypoints reference mode requires `reference.waypoints` in simulation.yaml")
         reference = build_waypoint_reference(waypoints, speed, dt)
+    elif reference_type == "figure8":
+        reference = build_figure8_reference(n_points=n_points, speed=speed, dt=dt)
     else:
         track = sim_config["track"]
         reference = build_circular_reference(

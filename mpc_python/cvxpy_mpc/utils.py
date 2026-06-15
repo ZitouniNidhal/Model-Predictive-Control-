@@ -146,3 +146,20 @@ def build_waypoint_reference(waypoints, speed, dt, n_points=None, a_lat_max=1.5)
         reference.append([x, y, wrap_angle(heading), v_ref])
 
     return np.array(reference, dtype=float)
+
+
+def build_figure8_reference(n_points, speed, dt, size_x=12.0, size_y=6.0):
+    """Build a figure-8 (Lissajous) reference trajectory."""
+    # Generate waypoints forming a figure-8
+    theta = np.linspace(0.0, 2 * np.pi, 100, endpoint=False)
+    waypoints = []
+    for t in theta:
+        x = size_x * math.sin(t)
+        y = size_y * math.sin(2 * t)
+        waypoints.append([x, y])
+    
+    # Repeat the waypoints to ensure we have enough points for the simulation
+    waypoints = waypoints + waypoints + waypoints + waypoints + waypoints
+    waypoints.append(waypoints[0])
+    
+    return build_waypoint_reference(waypoints, speed, dt, n_points=n_points)
