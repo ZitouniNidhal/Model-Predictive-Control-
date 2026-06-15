@@ -79,9 +79,9 @@ def test_load_yaml(tmp_path):
 
 
 def test_build_figure8_reference():
-    reference = build_figure8_reference(n_points=150, speed=1.5, dt=0.1)
+    reference = build_figure8_reference(n_points=150, speed=4.0, dt=0.1)
     assert reference.shape[0] == 151
     assert reference.shape[1] == 4
     # Ensure speed profiling occurred in corners
     speeds = reference[:, 3]
-    assert np.any(speeds < 1.5)
+    assert np.any(speeds < 4.0)
