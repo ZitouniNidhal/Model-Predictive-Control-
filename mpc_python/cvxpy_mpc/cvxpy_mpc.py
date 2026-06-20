@@ -7,7 +7,7 @@ convex half-plane constraints that are linearised around the current state.
 """
 
 import logging
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, Union, overload
 
 import cvxpy as cp
 import numpy as np
@@ -223,6 +223,26 @@ class IterativeMPC:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    @overload
+    def solve(
+        self,
+        x0: Union[Sequence, np.ndarray],
+        ref_traj: np.ndarray,
+        u_init: Optional[np.ndarray] = ...,
+        obstacles: Optional[Union[List[ObstacleDict], List[List[ObstacleDict]]]] = ...,
+        return_info: Literal[False] = ...,
+    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]: ...
+
+    @overload
+    def solve(
+        self,
+        x0: Union[Sequence, np.ndarray],
+        ref_traj: np.ndarray,
+        u_init: Optional[np.ndarray] = ...,
+        obstacles: Optional[Union[List[ObstacleDict], List[List[ObstacleDict]]]] = ...,
+        return_info: Literal[True] = ...,
+    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], dict]: ...
 
     def solve(
         self,
