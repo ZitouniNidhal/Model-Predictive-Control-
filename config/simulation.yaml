@@ -1,4 +1,5 @@
 reference:
+  # type: circle | waypoints | figure8 | lane_change
   type: circle
   radius: 8.0
   speed: 1.5
@@ -13,6 +14,11 @@ reference:
     - [-2.0, 4.0]
     - [-6.0, 2.0]
     - [-8.0, 0.0]
+  # Lane-change parameters (used when type: lane_change)
+  lane_change:
+    lane_width: 3.5       # lateral displacement between lanes (m)
+    straight_length: 20.0 # length of straight approach/exit sections (m)
+    transition_length: 15.0 # longitudinal length of the S-curve transition (m)
 
 track:
   radius: 8.0
