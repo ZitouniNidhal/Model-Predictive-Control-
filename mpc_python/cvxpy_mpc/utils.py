@@ -5,7 +5,8 @@ This module provides:
 - Angle wrapping
 - Kinematic bicycle model simulation
 - Jacobian linearization of dynamics and obstacle constraints
-- Reference trajectory builders (circular, waypoint, figure-8)
+- Reference trajectory builders (circular, waypoint, figure-8, lane-change)
+- Tracking performance metrics helper
 """
 
 import logging
@@ -391,3 +392,139 @@ def build_figure8_reference(
     waypoints.append(waypoints[0])
 
     return build_waypoint_reference(waypoints, speed, dt, n_points=n_points)
+
+
+def build_lane_change_reference(
+    n_points: int,
+    speed: float,
+    dt: float,
+    lane_width: float = 3.5,
+    straight_length: float = 20.0,
+    transition_length: float = 15.0,
+) -> np.ndarray:
+    """Build a smooth double-lane-change (S-curve) reference trajectory.
+
+    The path consists of three sections:
+      1. A straight initial approach.
+      2. A ``tanh``-blended lateral transition of width *lane_width*.
+      3. A straight section in the new lane.
+
+    The resulting waypoints are passed to :func:`build_waypoint_reference` for
+    arc-length parametrisation, heading computation, and curvature-aware speed
+    profiling.
+
+    Args:
+        n_points: Number of uniformly-spaced trajectory steps.
+        speed: Desired cruising speed (m/s). Must be > 0.
+        dt: Time step (seconds). Must be > 0.
+        lane_width: Lateral displacement between the two lanes (metres). Defaults to ``3.5``.
+        straight_length: Length of the initial and final straight sections (metres). Defaults to ``20.0``.
+        transition_length: Longitudinal length of the lateral transition (metres). Defaults to ``15.0``.
+
+    Returns:
+        Array of shape ``(n_points + 1, 4)`` with columns ``[x, y, yaw, v]``.
+
+    Raises:
+        ValueError: If *lane_width*, *straight_length*, *transition_length*, *speed*, or *dt* are
+            non-positive.
+    """
+    if speed <= 0.0:
+        raise ValueError(f"Reference speed must be positive, got {speed}.")
+    if dt <= 0.0:
+        raise ValueError(f"Time step dt must be positive, got {dt}.")
+    if lane_width <= 0.0:
+        raise ValueError(f"lane_width must be positive, got {lane_width}.")
+    if straight_length <= 0.0:
+        raise ValueError(f"straight_length must be positive, got {straight_length}.")
+    if transition_length <= 0.0:
+        raise ValueError(f"transition_length must be positive, got {transition_length}.")
+
+    logger.debug(
+        "Building lane-change reference: lane_width=%.2f, straight=%.1f, transition=%.1f",
+        lane_width, straight_length, transition_length,
+    )
+
+    total_length = straight_length + transition_length + straight_length
+    n_samples = max(200, n_points * 4)
+    xs = np.linspace(0.0, total_length, n_samples)
+
+    waypoints = []
+    for x_val in xs:
+        # Normalised longitudinal coordinate centred on the transition section
+        x_rel = (x_val - straight_length) / transition_length
+        # Smooth tanh blend: 0 at start, 1 at end of transition
+        blend = 0.5 * (1.0 + math.tanh(4.0 * (x_rel - 0.5)))
+        blend = float(np.clip(blend, 0.0, 1.0))
+        y_val = lane_width * blend
+        waypoints.append([x_val, y_val])
+
+    return build_waypoint_reference(waypoints, speed, dt, n_points=n_points)
+
+
+def compute_tracking_metrics(history: dict) -> dict:
+    """Compute summary performance metrics from a recorded simulation history.
+
+    The *history* dict is expected to have the same structure produced by
+    ``mpc_demo_nosim.main()``::
+
+        {
+            "x":     list of np.ndarray([x, y, yaw, v]),   # actual states
+            "xref":  list of np.ndarray([x, y, yaw, v]),   # reference states
+            "u":     list of np.ndarray([a, delta]),        # applied controls
+            "error": list of float,                         # positional tracking error
+        }
+
+    Args:
+        history: Simulation history dictionary as described above.
+
+    Returns:
+        Dictionary with the following keys:
+
+        * ``mean_error`` (float) — mean positional tracking error (m).
+        * ``max_error`` (float) — maximum positional tracking error (m).
+        * ``rms_error`` (float) — root-mean-square positional tracking error (m).
+        * ``mean_speed`` (float) — mean vehicle speed over the trajectory (m/s).
+        * ``total_accel_effort`` (float) — total variation of acceleration (sum of |Δa|).
+        * ``total_steer_effort`` (float) — total variation of steering angle (sum of |Δδ|).
+        * ``n_steps`` (int) — number of recorded simulation steps.
+    """
+    errors = np.asarray(history.get("error", []), dtype=float)
+    states = np.asarray(history.get("x", []), dtype=float)
+    controls = np.asarray(history.get("u", []), dtype=float)
+
+    n_steps = int(len(errors))
+
+    if n_steps == 0:
+        return {
+            "mean_error": float("nan"),
+            "max_error": float("nan"),
+            "rms_error": float("nan"),
+            "mean_speed": float("nan"),
+            "total_accel_effort": float("nan"),
+            "total_steer_effort": float("nan"),
+            "n_steps": 0,
+        }
+
+    mean_error = float(np.mean(errors))
+    max_error = float(np.max(errors))
+    rms_error = float(np.sqrt(np.mean(errors ** 2)))
+
+    mean_speed = float(np.mean(states[:, 3])) if states.ndim == 2 and states.shape[1] >= 4 else float("nan")
+
+    if controls.ndim == 2 and controls.shape[0] > 1:
+        delta_u = np.diff(controls, axis=0)
+        total_accel_effort = float(np.sum(np.abs(delta_u[:, 0])))
+        total_steer_effort = float(np.sum(np.abs(delta_u[:, 1])))
+    else:
+        total_accel_effort = float("nan")
+        total_steer_effort = float("nan")
+
+    return {
+        "mean_error": mean_error,
+        "max_error": max_error,
+        "rms_error": rms_error,
+        "mean_speed": mean_speed,
+        "total_accel_effort": total_accel_effort,
+        "total_steer_effort": total_steer_effort,
+        "n_steps": n_steps,
+    }
