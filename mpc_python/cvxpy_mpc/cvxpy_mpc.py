@@ -7,7 +7,7 @@ convex half-plane constraints that are linearised around the current state.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import cvxpy as cp
 import numpy as np
@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 # Type alias used for an obstacle dictionary
 ObstacleDict = Dict[str, Union[List[float], float]]
 
+# Default SQP convergence tolerance (max change in u between iterations)
+_DEFAULT_SQP_TOL = 1e-4
+
 
 class IterativeMPC:
     """Iterative (SQP-style) Model Predictive Controller for a kinematic bicycle model.
@@ -26,6 +29,8 @@ class IterativeMPC:
     The controller solves a finite-horizon QP at each time step by
     sequentially linearising the nonlinear vehicle dynamics around the
     previous solution, iterating up to :attr:`max_iters` times per call.
+    Early exit is triggered when the maximum change in the control sequence
+    between two consecutive SQP iterations falls below :attr:`sqp_tol`.
 
     Args:
         config: Configuration dictionary with the following optional keys:
@@ -33,6 +38,7 @@ class IterativeMPC:
             * ``dt`` (float) — time step in seconds. Default: ``0.1``.
             * ``horizon`` (int) — prediction horizon. Default: ``10``.
             * ``max_iters`` (int) — SQP iterations per solve call. Default: ``5``.
+            * ``sqp_tol`` (float) — SQP convergence tolerance. Default: ``1e-4``.
             * ``wheelbase`` (float) — vehicle wheelbase in metres. Default: ``0.16``.
             * ``obstacle_margin`` (float) — safety margin beyond obstacle radius. Default: ``0.25``.
             * ``obstacle_slack`` (bool) — use slack variables for obstacle constraints. Default: ``True``.
@@ -54,6 +60,7 @@ class IterativeMPC:
         self.dt: float = float(config["dt"])
         self.horizon: int = int(config["horizon"])
         self.max_iters: int = int(config.get("max_iters", 5))
+        self.sqp_tol: float = float(config.get("sqp_tol", _DEFAULT_SQP_TOL))
         self.wheelbase: float = float(config.get("wheelbase", 0.16))
         self.obstacle_margin: float = float(config.get("obstacle_margin", 0.25))
         self.obstacle_slack: bool = bool(config.get("obstacle_slack", True))
@@ -69,6 +76,8 @@ class IterativeMPC:
             raise ValueError(f"max_iters must be at least 1, got {self.max_iters}.")
         if self.wheelbase <= 0.0:
             raise ValueError(f"wheelbase must be positive, got {self.wheelbase}.")
+        if self.sqp_tol <= 0.0:
+            raise ValueError(f"sqp_tol must be positive, got {self.sqp_tol}.")
 
         weights = config.get("weights", {})
         self.Q: np.ndarray = np.diag([
@@ -97,8 +106,8 @@ class IterativeMPC:
         self.ddelta_max: float = float(constraints.get("ddelta_max", 0.3))
 
         logger.info(
-            "IterativeMPC initialised: horizon=%d, dt=%.3f, max_iters=%d, wheelbase=%.3f",
-            self.horizon, self.dt, self.max_iters, self.wheelbase,
+            "IterativeMPC initialised: horizon=%d, dt=%.3f, max_iters=%d, sqp_tol=%.2e, wheelbase=%.3f",
+            self.horizon, self.dt, self.max_iters, self.sqp_tol, self.wheelbase,
         )
 
     # ------------------------------------------------------------------
@@ -202,6 +211,9 @@ class IterativeMPC:
         if self.obstacle_slack and slack_vars:
             cost += self.obstacle_slack_weight * cp.sum(slack_vars)
 
+        # Terminal state constraints: velocity bounds at step N
+        cons += [self.v_min <= x[N, 3], x[N, 3] <= self.v_max]
+
         # Terminal cost
         dx_terminal = x[N, :] - ref_traj[N, :]
         cost += cp.quad_form(dx_terminal, self.Qf)
@@ -218,11 +230,16 @@ class IterativeMPC:
         ref_traj: np.ndarray,
         u_init: Optional[np.ndarray] = None,
         obstacles: Optional[Union[List[ObstacleDict], List[List[ObstacleDict]]]] = None,
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        return_info: bool = False,
+    ) -> Union[
+        Tuple[Optional[np.ndarray], Optional[np.ndarray]],
+        Tuple[Optional[np.ndarray], Optional[np.ndarray], dict],
+    ]:
         """Solve the MPC problem and return the optimal state and control trajectories.
 
         The method performs up to :attr:`max_iters` SQP iterations, each time
         linearising the dynamics around the current warm-start trajectory.
+        Iteration terminates early when ``max(|u_new - u_old|) < sqp_tol``.
 
         Args:
             x0: Initial vehicle state ``[x, y, yaw, v]``.
@@ -232,15 +249,22 @@ class IterativeMPC:
                 If ``None`` or wrong shape, zeros are used.
             obstacles: Optional obstacle specification (same format as
                 :meth:`_build_problem`).
+            return_info: If ``True``, return a third element — a metadata dict
+                containing ``{"iterations": int, "obj_val": float, "status": str}``.
 
         Returns:
-            Tuple ``(x_traj, u_traj)`` where:
+            When ``return_info=False`` (default):
+                Tuple ``(x_traj, u_traj)`` where:
 
-            * ``x_traj`` — optimal state trajectory of shape ``(N+1, 4)``.
-            * ``u_traj`` — optimal control sequence of shape ``(N, 2)``.
+                * ``x_traj`` — optimal state trajectory of shape ``(N+1, 4)``.
+                * ``u_traj`` — optimal control sequence of shape ``(N, 2)``.
 
-            Both are ``None`` if the solver fails or returns an infeasible /
-            unbounded status.
+            When ``return_info=True``:
+                Tuple ``(x_traj, u_traj, info)`` where ``info`` is a dict with
+                keys ``iterations``, ``obj_val``, and ``status``.
+
+            Both ``x_traj`` and ``u_traj`` are ``None`` if the solver fails or
+            returns an infeasible / unbounded status.
         """
         N = self.horizon
         x0 = np.asarray(x0, dtype=float)
@@ -249,7 +273,8 @@ class IterativeMPC:
             logger.error(
                 "ref_traj shape mismatch: expected (%d, 4), got %s.", N + 1, ref_traj.shape
             )
-            return None, None
+            info = {"iterations": 0, "obj_val": float("nan"), "status": "shape_error"}
+            return (None, None, info) if return_info else (None, None)
 
         # Initialise warm-start control sequence
         if u_init is None or np.shape(u_init) != (N, 2):
@@ -264,6 +289,10 @@ class IterativeMPC:
         for k in range(N):
             x_prev[k + 1, :] = bicycle_model(x_prev[k, :], u_prev[k, :], self.dt, self.wheelbase)
 
+        final_status = "unknown"
+        final_obj = float("nan")
+        iters_done = 0
+
         for iteration in range(self.max_iters):
             logger.debug("SQP iteration %d / %d", iteration + 1, self.max_iters)
             problem, x_var, u_var = self._build_problem(x0, ref_traj, x_prev, u_prev, obstacles=obstacles)
@@ -272,29 +301,49 @@ class IterativeMPC:
                 problem.solve(solver=cp.OSQP, warm_start=True, verbose=False, **self.solver_options)
             except cp.error.SolverError as exc:
                 logger.warning("CVXPY SolverError on iteration %d: %s", iteration + 1, exc)
-                return None, None
+                info = {"iterations": iteration + 1, "obj_val": float("nan"), "status": "solver_error"}
+                return (None, None, info) if return_info else (None, None)
 
             if problem.status not in (cp.OPTIMAL, cp.OPTIMAL_INACCURATE):
                 logger.warning(
                     "Solver returned non-optimal status '%s' on iteration %d.",
                     problem.status, iteration + 1,
                 )
-                return None, None
+                info = {"iterations": iteration + 1, "obj_val": float("nan"), "status": problem.status}
+                return (None, None, info) if return_info else (None, None)
 
             if u_var.value is None:
                 logger.warning("u_var.value is None after solve on iteration %d.", iteration + 1)
-                return None, None
+                info = {"iterations": iteration + 1, "obj_val": float("nan"), "status": "none_value"}
+                return (None, None, info) if return_info else (None, None)
 
             u_solution = np.array(u_var.value, dtype=float)
             if np.any(np.isnan(u_solution)):
                 logger.warning("NaN values detected in solution on iteration %d.", iteration + 1)
-                return None, None
+                info = {"iterations": iteration + 1, "obj_val": float("nan"), "status": "nan_solution"}
+                return (None, None, info) if return_info else (None, None)
 
-            # Update warm-start for next SQP iteration
+            final_status = problem.status
+            final_obj = float(problem.value) if problem.value is not None else float("nan")
+            iters_done = iteration + 1
+
+            # SQP early-exit: stop if the control sequence has converged
+            delta_u = np.max(np.abs(u_solution - u_prev))
             u_prev = u_solution
             x_prev[0, :] = x0
             for k in range(N):
                 x_prev[k + 1, :] = bicycle_model(x_prev[k, :], u_prev[k, :], self.dt, self.wheelbase)
 
-        logger.debug("MPC solve completed successfully.")
-        return x_prev, u_prev
+            if delta_u < self.sqp_tol:
+                logger.debug(
+                    "SQP converged at iteration %d (delta_u=%.2e < tol=%.2e).",
+                    iteration + 1, delta_u, self.sqp_tol,
+                )
+                break
+
+        logger.debug(
+            "MPC solve completed: %d iteration(s), status=%s, obj=%.4f.",
+            iters_done, final_status, final_obj,
+        )
+        info = {"iterations": iters_done, "obj_val": final_obj, "status": final_status}
+        return (x_prev, u_prev, info) if return_info else (x_prev, u_prev)
