@@ -1,6 +1,7 @@
 dt: 0.1
 horizon: 15
 max_iters: 6
+sqp_tol: 1.0e-4  # SQP early-exit convergence tolerance (max change in u between iterations)
 wheelbase: 0.16
 obstacle_margin: 0.25
 
