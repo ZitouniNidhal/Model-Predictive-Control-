@@ -18,25 +18,29 @@ The implementation is designed for rapid experimentation, reproducibility, and e
 
 ## Key features
 
-- Iterative MPC with warm-started optimization
-- Headless simulation demo with plotting and CSV logging
-- Optional obstacle avoidance via linearized constraints
+- Iterative MPC with warm-started optimization and SQP early-exit convergence
+- Headless simulation demo with plotting, CSV logging, and performance metrics
+- Optional obstacle avoidance via linearized constraints (soft slack formulation)
+- Multiple reference trajectory modes: circle, waypoints, figure-8, and lane-change
 - MuJoCo visualization demo for interactive playback
+- `MPCRunner` wrapper class for clean simulation loop reuse in scripts and tests
 - Lightweight utility modules for dynamics, linearization, and reference generation
-- Basic unit tests for solver and utility behavior
+- Unit tests for solver robustness, metrics, and trajectory builders
 
 ## Repository structure
 
 - `config/`
-  - `mpc.yaml` — MPC configuration and solver weights
-  - `simulation.yaml` — reference path, track, and obstacle settings
+  - `mpc.yaml` — MPC configuration, solver weights, and SQP tolerance
+  - `simulation.yaml` — reference path, track, lane-change, and obstacle settings
 - `mpc_python/cvxpy_mpc/`
-  - `cvxpy_mpc.py` — iterative convex MPC implementation
-  - `utils.py` — bicycle dynamics, linearization, obstacle handling, and references
+  - `cvxpy_mpc.py` — iterative convex MPC implementation with SQP early-exit
+  - `utils.py` — bicycle dynamics, linearization, obstacle handling, and reference builders
+  - `metrics.py` — tracking error, control effort, and constraint satisfaction analysis
+  - `planners.py` — `MPCRunner` high-level simulation loop wrapper
 - `mpc_python/models/mushr/mushr.xml` — MuJoCo model for the visualization demo
 - `mpc_python/mpc_demo_nosim.py` — headless simulation entry point
 - `mpc_python/mpc_demo_mujoco.py` — MuJoCo visualization entry point
-- `tests/` — automated tests
+- `tests/` — automated tests (solver, metrics, lane-change, obstacle avoidance)
 
 ## Installation
 
@@ -98,11 +102,13 @@ MuJoCo requires a working installation and proper environment variables.
 
 - `--config` — path to `config/mpc.yaml`
 - `--simulation` — path to `config/simulation.yaml`
-- `--reference-mode` — `circle` or `waypoints`
+- `--reference-mode` — `circle`, `waypoints`, `figure8`, or `lane_change`
 - `--obstacle-avoidance` — enable obstacle avoidance
 - `--start-offset` — initial lateral offset from the reference
 - `--start-speed` — initial speed
 - `--save-log` — CSV file path for history
+- `--animate` — show real-time animation
+- `--metrics` — print a performance summary table after simulation
 
 `mpc_demo_mujoco.py` supports:
 
@@ -148,11 +154,33 @@ Key options:
 Main exports:
 
 - `mpc_python.IterativeMPC`
+- `mpc_python.MPCRunner`
 - `mpc_python.load_yaml`
 - `mpc_python.bicycle_model`
 - `mpc_python.linearize_dynamics`
 - `mpc_python.build_circular_reference`
 - `mpc_python.build_waypoint_reference`
+- `mpc_python.build_figure8_reference`
+- `mpc_python.build_lane_change_reference`
+- `mpc_python.compute_tracking_metrics`
+- `mpc_python.summarize`
+
+### MPCRunner example
+
+```python
+from mpc_python import IterativeMPC, MPCRunner, build_circular_reference, load_yaml, summarize
+
+config = load_yaml("config/mpc.yaml")
+mpc = IterativeMPC(config)
+reference = build_circular_reference(n_points=300, radius=8.0, speed=1.5, dt=config["dt"])
+
+x0 = [reference[0, 0] - 0.5, reference[0, 1], reference[0, 2], 0.2]
+runner = MPCRunner(mpc, reference, x0, wheelbase=config.get("wheelbase", 0.16))
+history = runner.run(n_steps=200)
+
+# Print performance metrics
+summarize(history, config.get("constraints", {}))
+```
 
 ## Testing
 
@@ -202,4 +230,4 @@ Contributions are welcome. Suggested workflow:
 
 ## License
 
-This project is provided as-is for demonstration and educational use. Add a license such as MIT if you publish it publicly.
+This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
