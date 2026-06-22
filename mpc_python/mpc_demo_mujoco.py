@@ -13,6 +13,8 @@ from mpc_python.cvxpy_mpc import (
     IterativeMPC,
     build_circular_reference,
     build_waypoint_reference,
+    build_figure8_reference,
+    build_lane_change_reference,
     load_yaml,
 )
 
@@ -21,7 +23,12 @@ def main():
     parser = argparse.ArgumentParser(description="MuJoCo MPC demo entry point.")
     parser.add_argument("--config", default="config/mpc.yaml", help="Path to MPC configuration")
     parser.add_argument("--simulation", default="config/simulation.yaml", help="Path to simulation configuration")
-    parser.add_argument("--reference-mode", choices=["circle", "waypoints"], default=None, help="Reference path type to use in MuJoCo demo.")
+    parser.add_argument(
+        "--reference-mode",
+        choices=["circle", "waypoints", "figure8", "lane_change"],
+        default=None,
+        help="Reference path type to use in MuJoCo demo.",
+    )
     args = parser.parse_args()
 
     if mujoco is None:
@@ -86,6 +93,18 @@ def generate_reference(sim_config, n_points, dt, override_mode=None):
         if not waypoints:
             raise ValueError("Waypoints reference mode requires `reference.waypoints` in simulation.yaml")
         reference = build_waypoint_reference(waypoints, speed, dt)
+    elif reference_type == "figure8":
+        reference = build_figure8_reference(n_points=n_points, speed=speed, dt=dt)
+    elif reference_type == "lane_change":
+        lc = reference_config.get("lane_change", {})
+        reference = build_lane_change_reference(
+            n_points=n_points,
+            speed=speed,
+            dt=dt,
+            lane_width=float(lc.get("lane_width", 3.5)),
+            straight_length=float(lc.get("straight_length", 20.0)),
+            transition_length=float(lc.get("transition_length", 15.0)),
+        )
     else:
         track = sim_config["track"]
         reference = build_circular_reference(

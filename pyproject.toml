@@ -17,6 +17,10 @@ authors = [
   { name = "Nidhal Zitouni" },
 ]
 
+[project.scripts]
+mpc-demo-nosim = "mpc_python.mpc_demo_nosim:main"
+mpc-demo-mujoco = "mpc_python.mpc_demo_mujoco:main"
+
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"

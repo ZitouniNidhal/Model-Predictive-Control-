@@ -76,6 +76,23 @@ python mpc_python/mpc_demo_nosim.py
 
 This runs the MPC controller in simulation, plots trajectory and control signals, and optionally saves history to CSV.
 
+### Run as a package or installed script
+
+If the package is installed locally, you can also run the headless demo as a Python module:
+
+```bash
+python -m mpc_python
+```
+
+Or use the provided console scripts after installation:
+
+```bash
+mpc-demo-nosim
+mpc-demo-mujoco
+```
+
+These commands launch the same entry points as the demo scripts.
+
 ### Headless demo with CSV output
 
 ```bash
